@@ -18,6 +18,10 @@ app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/shipments', require('./routes/shipmentRoutes'));
 
+app.get('/api/health', (req, res) => {
+    res.status(200).send('Server is awake');
+});
+
 const PORT = process.env.PORT || 8080;
 
 app.listen(PORT, () => {

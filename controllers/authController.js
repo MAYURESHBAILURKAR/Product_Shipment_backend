@@ -33,4 +33,32 @@ const loginUser = async (req, res) => {
   }
 };
 
-module.exports = { loginUser };
+
+// backend/controllers/authController.ts
+
+// @desc    Directly reset password (No Email Check)
+// @route   POST /api/auth/reset-password
+// @access  Public
+const resetPassword = async (req, res) => {
+  const { email, newPassword } = req.body;
+
+  try {
+    // 1. Find User
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // 2. Update Password (The pre-save hook in your User model will hash it)
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: "Password updated successfully" });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+module.exports = { loginUser,resetPassword };
