@@ -6,10 +6,7 @@ const productSchema = new mongoose.Schema({
   brand: { type: String, required: true },
   photoUrl: { type: String }, // Cloudinary URL
   cloudinaryId: { type: String },
-  
-  // Inventory Snapshot for the User
-  currentStock: { type: Number, default: 0 }, 
-  
+  currentStock: { type: Number, default: 0 },  
   createdAt: { type: Date, default: Date.now }
 });
 

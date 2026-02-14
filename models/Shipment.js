@@ -5,13 +5,13 @@ const shipmentSchema = new mongoose.Schema({
   items: [
     {
       product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' },
-      productName: { type: String }, // Snapshot in case product is deleted
+      productName: { type: String }, 
       quantity: { type: Number, required: true },
-      pricePerUnit: { type: Number, required: true } // Captured at moment of shipment
+      pricePerUnit: { type: Number, required: true } 
     }
   ],
   totalQuantity: { type: Number, required: true },
-  totalAmount: { type: Number, required: true }, // calculated based on user's priceAllotted
+  totalAmount: { type: Number, required: true }, 
   
   status: { 
     type: String, 

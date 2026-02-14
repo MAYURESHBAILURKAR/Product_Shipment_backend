@@ -12,7 +12,7 @@ const multer = require('multer');
 const { storage } = require('../config/cloudinary');
 const upload = multer({ storage });
 
-// Define Admin Middleware (if not already imported)
+// Define Admin Middleware
 const admin = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();

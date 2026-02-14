@@ -3,7 +3,6 @@ const { cloudinary } = require('../config/cloudinary');
 
 // @desc    Get logged in user's products
 // @route   GET /api/products/myproducts
-// @access  Private (Production)
 const getMyProducts = async (req, res) => {
   try {
     const products = await Product.find({ user: req.user._id });
@@ -15,11 +14,9 @@ const getMyProducts = async (req, res) => {
 
 // @desc    Create a new product
 // @route   POST /api/products
-// @access  Private
 const createProduct = async (req, res) => {
   const { name, brand } = req.body;
   
-  // Req.file is coming from Multer
   const photoUrl = req.file ? req.file.path : '';
   const cloudinaryId = req.file ? req.file.filename : '';
 
@@ -30,7 +27,7 @@ const createProduct = async (req, res) => {
       brand,
       photoUrl,
       cloudinaryId,
-      currentStock: 0, // Starts at 0 until admin sends stock or user produces (logic TBD)
+      currentStock: 0,
     });
 
     const createdProduct = await product.save();
@@ -42,7 +39,6 @@ const createProduct = async (req, res) => {
 
 // @desc    Delete a product
 // @route   DELETE /api/products/:id
-// @access  Private
 const deleteProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.id);
@@ -51,7 +47,7 @@ const deleteProduct = async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
 
-    // Ensure user owns the product
+
     if (product.user.toString() !== req.user._id.toString()) {
       return res.status(401).json({ message: 'Not authorized' });
     }

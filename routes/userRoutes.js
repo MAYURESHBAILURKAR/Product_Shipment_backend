@@ -3,7 +3,7 @@ const router = express.Router();
 const { getUsers, createUser, updateUser, deleteUser, updateUserProfile } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 
-// Middleware to check if admin
+
 const admin = (req, res, next) => {
   if (req.user && req.user.role === 'admin') {
     next();

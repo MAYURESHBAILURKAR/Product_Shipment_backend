@@ -4,7 +4,6 @@ const bcrypt = require('bcryptjs');
 
 // @desc    Get all production users
 // @route   GET /api/users
-// @access  Admin
 const getUsers = async (req, res) => {
   try {
     const users = await User.find({ role: 'production' }).select('-password');
@@ -16,7 +15,6 @@ const getUsers = async (req, res) => {
 
 // @desc    Create a new production user
 // @route   POST /api/users
-// @access  Admin
 const createUser = async (req, res) => {
   const { name, email, password, mobile, priceAllotted } = req.body;
   
@@ -36,7 +34,6 @@ const createUser = async (req, res) => {
 
 // @desc    Delete user
 // @route   DELETE /api/users/:id
-// @access  Admin
 const deleteUser = async (req, res) => {
   try {
     const user = await User.findById(req.params.id);
@@ -51,7 +48,7 @@ const deleteUser = async (req, res) => {
 
 // @desc    Update User Profile (Self-Service)
 // @route   PUT /api/users/profile
-// @access  Private
+
 const updateUserProfile = async (req, res) => {
   const user = await User.findById(req.user._id);
 
@@ -74,7 +71,7 @@ const updateUserProfile = async (req, res) => {
       email: updatedUser.email,
       role: updatedUser.role,
       mobile: updateUser.mobile,
-      token: req.token // Keep existing token
+      token: req.token 
     });
   } else {
     res.status(404).json({ message: 'User not found' });
@@ -83,7 +80,6 @@ const updateUserProfile = async (req, res) => {
 
 // @desc    Update User by Admin (Full Control)
 // @route   PUT /api/users/:id
-// @access  Admin
 const updateUser = async (req, res) => {
   const user = await User.findById(req.params.id);
 
@@ -106,7 +102,7 @@ const updateUser = async (req, res) => {
   }
 };
 
-// ... export others ...
+
 module.exports = { 
-  getUsers, createUser, updateUser, deleteUser, updateUserProfile // <--- Add this
+  getUsers, createUser, updateUser, deleteUser, updateUserProfile 
 };

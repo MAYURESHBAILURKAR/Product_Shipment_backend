@@ -13,9 +13,9 @@ const userSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// FIX: Removed 'next' parameter. Since it's async, we just await.
+
 userSchema.pre('save', async function () {
-  // If password is not modified, simply return (exit function)
+
   if (!this.isModified('password')) return;
 
   // Hash the password

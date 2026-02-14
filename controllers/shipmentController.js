@@ -4,9 +4,9 @@ const User = require('../models/User');
 
 // @desc    Create a new shipment
 // @route   POST /api/shipments
-// @access  Private (Production User)
+
 const createShipment = async (req, res) => {
-  const { items } = req.body; // items = [{ productId, quantity }]
+  const { items } = req.body; 
 
   if (!items || items.length === 0) {
     return res.status(400).json({ message: 'No items in shipment' });
@@ -50,7 +50,7 @@ const createShipment = async (req, res) => {
       
       shipmentItems.push({
         product: product._id,
-        productName: product.name, // Snapshot name in case it changes later
+        productName: product.name,
         quantity: item.quantity,
         pricePerUnit: pricePerUnit
       });
@@ -73,12 +73,9 @@ const createShipment = async (req, res) => {
 
     // TODO: Send SMS/WhatsApp Notification to Admin here
 
-    // --- NOTIFICATION STUB ---
     console.log(`[SMS SYSTEM] Sending SMS to Admin:`);
     console.log(`New Shipment from ${req.user.name}: ${totalQuantity} items. Value: ${totalAmount}`);
     console.log(`[WHATSAPP SYSTEM] Sending WhatsApp template msg_shipment_created to Admin.`);
-    // In real app: await twilioClient.messages.create(...)
-    // -------------------------
 
     res.status(201).json(createdShipment);
 
@@ -90,11 +87,10 @@ const createShipment = async (req, res) => {
 
 // @desc    Get my shipment history
 // @route   GET /api/shipments/myshipments
-// @access  Private
 const getMyShipments = async (req, res) => {
   try {
     const shipments = await Shipment.find({ sender: req.user._id })
-      .sort({ shippedAt: -1 }); // Newest first
+      .sort({ shippedAt: -1 }); 
     res.json(shipments);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -104,13 +100,12 @@ const getMyShipments = async (req, res) => {
 
 // @desc    Get ALL shipments (Admin only)
 // @route   GET /api/shipments
-// @access  Admin
 const getAllShipments = async (req, res) => {
   try {
     // Populate sender name so Admin knows who sent it
     const shipments = await Shipment.find({})
       .populate('sender', 'name email')
-      .sort({ shippedAt: -1 }); // Newest first
+      .sort({ shippedAt: -1 });
     res.json(shipments);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -119,9 +114,9 @@ const getAllShipments = async (req, res) => {
 
 // @desc    Update shipment status (Received/Paid)
 // @route   PUT /api/shipments/:id
-// @access  Admin
+
 const updateShipmentStatus = async (req, res) => {
-  const { status, paymentStatus } = req.body; // e.g. { status: 'received' } or { paymentStatus: 'paid' }
+  const { status, paymentStatus } = req.body; 
 
   try {
     const shipment = await Shipment.findById(req.params.id);
@@ -149,9 +144,9 @@ const updateShipmentStatus = async (req, res) => {
 
 // @desc    Get Aggregated Reports (Admin)
 // @route   GET /api/shipments/reports?period=monthly
-// @access  Admin
+
 const getShipmentReports = async (req, res) => {
-  const { period } = req.query; // 'weekly', 'monthly', 'yearly'
+  const { period } = req.query; 
   
   let startDate = new Date();
   
@@ -168,13 +163,13 @@ const getShipmentReports = async (req, res) => {
 
   try {
     const stats = await Shipment.aggregate([
-      // 1. Filter by Date and Status (only count received/approved shipments usually, but we'll count all for now)
+      // 1. Filter by Date and Status 
       { 
         $match: { 
           shippedAt: { $gte: startDate } 
         } 
       },
-      // 2. Group by Sender (User)
+      // 2. Group by Sender
       {
         $group: {
           _id: "$sender",
@@ -216,9 +211,9 @@ const getShipmentReports = async (req, res) => {
 
 // @desc    Edit a pending shipment
 // @route   PUT /api/shipments/:id/edit
-// @access  Private (Sender or Admin)
+
 const updateShipment = async (req, res) => {
-  const { items } = req.body; // items = [{ productId, quantity }]
+  const { items } = req.body; 
 
   try {
     const shipment = await Shipment.findById(req.params.id);
@@ -227,22 +222,21 @@ const updateShipment = async (req, res) => {
       return res.status(404).json({ message: 'Shipment not found' });
     }
 
-    // 1. Check Status (Only Pending allowed)
+    // 1. Check Status
     if (shipment.status !== 'pending') {
       return res.status(400).json({ message: 'Cannot edit processed shipments' });
     }
 
-    // 2. Check Authorization (Sender or Admin)
+    // 2. Check Authorization
     if (shipment.sender.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    // 3. Revert Old Stock (Add back everything first)
-    // This is the safest way to handle complex edits (remove old, add new)
+    // 3. Revert Old Stock
     for (const oldItem of shipment.items) {
       const product = await Product.findById(oldItem.product);
       if (product) {
-        product.currentStock += oldItem.quantity; // Add back
+        product.currentStock += oldItem.quantity; 
         await product.save();
       }
     }
@@ -252,7 +246,7 @@ const updateShipment = async (req, res) => {
     let totalAmount = 0;
     const newShipmentItems = [];
     
-    // Get user to find price rate (use sender from shipment to be safe if Admin is editing)
+    // Get user to find price rate
     const sender = await User.findById(shipment.sender);
     const pricePerUnit = sender.priceAllotted || 0;
 
@@ -300,7 +294,7 @@ const updateShipment = async (req, res) => {
 
 // @desc    Get production stats for the last 7 days
 // @route   GET /api/shipments/stats/weekly
-// @access  Admin
+
 const getWeeklyProductionStats = async (req, res) => {
   try {
     const sevenDaysAgo = new Date();
@@ -310,7 +304,7 @@ const getWeeklyProductionStats = async (req, res) => {
       { $match: { shippedAt: { $gte: sevenDaysAgo } } },
       {
         $group: {
-          _id: { $dayOfWeek: "$shippedAt" }, // 1 (Sun) to 7 (Sat)
+          _id: { $dayOfWeek: "$shippedAt" },
           totalQuantity: { $sum: "$totalQuantity" }
         }
       },
@@ -326,12 +320,12 @@ const getWeeklyProductionStats = async (req, res) => {
 
 // @desc    Get single shipment by ID
 // @route   GET /api/shipments/:id
-// @access  Private
+
 const getShipmentById = async (req, res) => {
   try {
     const shipment = await Shipment.findById(req.params.id)
-      .populate("sender", "name email") // Get user details
-      .populate("items.product", "name brand photoUrl"); // Get product details
+      .populate("sender", "name email") 
+      .populate("items.product", "name brand photoUrl");
 
     if (!shipment) {
       return res.status(404).json({ message: "Shipment not found" });
@@ -356,5 +350,5 @@ const getShipmentById = async (req, res) => {
 // Export it
 module.exports = { 
   createShipment, getMyShipments, getAllShipments, updateShipmentStatus, getShipmentReports,
-  updateShipment,getWeeklyProductionStats, getShipmentById // <--- NEW
+  updateShipment,getWeeklyProductionStats, getShipmentById
 };

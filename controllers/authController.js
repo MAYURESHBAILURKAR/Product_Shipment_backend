@@ -8,7 +8,6 @@ const generateToken = (id, role) => {
 
 // @desc    Auth user & get token
 // @route   POST /api/auth/login
-// @access  Public
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
 
@@ -22,7 +21,7 @@ const loginUser = async (req, res) => {
         email: user.email,
         role: user.role,
         mobile:user.mobile,
-        priceAllotted: user.priceAllotted, // Crucial for frontend logic
+        priceAllotted: user.priceAllotted,
         token: generateToken(user._id, user.role),
       });
     } else {
@@ -34,11 +33,9 @@ const loginUser = async (req, res) => {
 };
 
 
-// backend/controllers/authController.ts
-
-// @desc    Directly reset password (No Email Check)
+// @desc    reset password
 // @route   POST /api/auth/reset-password
-// @access  Public
+
 const resetPassword = async (req, res) => {
   const { email, newPassword } = req.body;
 
@@ -50,7 +47,7 @@ const resetPassword = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // 2. Update Password (The pre-save hook in your User model will hash it)
+    // 2. Update Password
     user.password = newPassword;
     await user.save();
 
