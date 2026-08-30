@@ -116,13 +116,27 @@ const getAllShipments = async (req, res) => {
 // @route   PUT /api/shipments/:id
 
 const updateShipmentStatus = async (req, res) => {
-  const { status, paymentStatus } = req.body; 
+  const { status, paymentStatus } = req.body;
 
   try {
     const shipment = await Shipment.findById(req.params.id);
 
     if (!shipment) {
       return res.status(404).json({ message: 'Shipment not found' });
+    }
+
+    const isAdmin = req.user && req.user.role === 'admin';
+    const isOwner = shipment.sender.toString() === req.user._id.toString();
+
+    // Non-admins may only touch payment status, and only on their own
+    // shipments. Only admins can move the shipment status itself.
+    if (!isAdmin) {
+      if (!isOwner) {
+        return res.status(401).json({ message: 'Not authorized to update this shipment' });
+      }
+      if (status) {
+        return res.status(401).json({ message: 'Only admins can update shipment status' });
+      }
     }
 
     if (status) {

@@ -27,7 +27,7 @@ router.get('/stats/weekly', protect, admin, getWeeklyProductionStats);
 router.get('/myshipments', protect, getMyShipments);
 router.get("/:id", protect, getShipmentById);
 router.get('/', protect, admin, getAllShipments);
-router.put('/:id', protect, admin, updateShipmentStatus);
+router.put('/:id', protect, updateShipmentStatus);
 router.put('/:id/edit', protect, updateShipment);
 
 module.exports = router;
