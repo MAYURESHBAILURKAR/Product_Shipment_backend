@@ -146,7 +146,15 @@ const updateShipmentStatus = async (req, res) => {
 
     if (paymentStatus) {
       shipment.paymentStatus = paymentStatus;
-      if (paymentStatus === 'paid') shipment.paidAt = Date.now();
+      if (paymentStatus === 'paid') {
+        shipment.paidAt = Date.now();
+        // A payout only happens after the warehouse accepted the goods,
+        // so paying it out implies the shipment was received.
+        if (shipment.status === 'pending') {
+          shipment.status = 'received';
+          shipment.receivedAt = Date.now();
+        }
+      }
     }
 
     const updatedShipment = await shipment.save();
