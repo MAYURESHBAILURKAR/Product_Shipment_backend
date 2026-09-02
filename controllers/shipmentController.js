@@ -1,6 +1,7 @@
 const Shipment = require('../models/Shipment');
 const Product = require('../models/Product');
 const User = require('../models/User');
+const { notifyAdmins, notifyUser } = require('./notificationController');
 
 // @desc    Create a new shipment
 // @route   POST /api/shipments
@@ -71,6 +72,13 @@ const createShipment = async (req, res) => {
 
     const createdShipment = await shipment.save();
 
+    // Push notify admins (fire-and-forget — never blocks the response).
+    notifyAdmins(
+      'New Shipment',
+      `${req.user.name} shipped ${totalQuantity} units · ₹${totalAmount}`,
+      { shipmentId: createdShipment._id.toString() }
+    );
+
     // TODO: Send SMS/WhatsApp Notification to Admin here
 
     console.log(`[SMS SYSTEM] Sending SMS to Admin:`);
@@ -139,18 +147,26 @@ const updateShipmentStatus = async (req, res) => {
       }
     }
 
+    // Track what changed so we can push-notify afterwards (fire-and-forget).
+    let statusChangedTo = null;
+    let paidNow = false;
+
     if (status) {
+      statusChangedTo = status;
       shipment.status = status;
       if (status === 'received') shipment.receivedAt = Date.now();
     }
 
     if (paymentStatus) {
+      const wasUnpaid = shipment.paymentStatus !== 'paid';
       shipment.paymentStatus = paymentStatus;
       if (paymentStatus === 'paid') {
+        paidNow = wasUnpaid;
         shipment.paidAt = Date.now();
         // A payout only happens after the warehouse accepted the goods,
         // so paying it out implies the shipment was received.
         if (shipment.status === 'pending') {
+          statusChangedTo = statusChangedTo || 'received';
           shipment.status = 'received';
           shipment.receivedAt = Date.now();
         }
@@ -158,6 +174,33 @@ const updateShipmentStatus = async (req, res) => {
     }
 
     const updatedShipment = await shipment.save();
+
+    // Push notifications to the sender (fire-and-forget).
+    const shipmentId = updatedShipment._id.toString();
+    if (statusChangedTo === 'received') {
+      notifyUser(
+        updatedShipment.sender,
+        'Shipment Received',
+        `Your shipment of ${updatedShipment.totalQuantity} units was accepted.`,
+        { shipmentId }
+      );
+    } else if (statusChangedTo === 'rejected') {
+      notifyUser(
+        updatedShipment.sender,
+        'Shipment Rejected',
+        `Your shipment of ${updatedShipment.totalQuantity} units was rejected.`,
+        { shipmentId }
+      );
+    }
+    if (paidNow) {
+      notifyUser(
+        updatedShipment.sender,
+        'Payment Sent',
+        `₹${updatedShipment.totalAmount} for your shipment has been paid.`,
+        { shipmentId }
+      );
+    }
+
     res.json(updatedShipment);
   } catch (error) {
     res.status(500).json({ message: error.message });

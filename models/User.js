@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema({
   locality: { type: String },
   priceAllotted: { type: Number, default: 0 },
   isActive: { type: Boolean, default: true },
+  expoPushToken: { type: String, default: null }, // Expo push token for notifications
   createdAt: { type: Date, default: Date.now }
 });
 

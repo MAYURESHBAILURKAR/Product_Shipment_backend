@@ -103,6 +103,28 @@ const updateUser = async (req, res) => {
 };
 
 
-module.exports = { 
-  getUsers, createUser, updateUser, deleteUser, updateUserProfile 
+// @desc    Save this device's Expo push token for the logged-in user
+// @route   POST /api/users/push-token
+const savePushToken = async (req, res) => {
+  try {
+    const { expoPushToken } = req.body;
+
+    if (!expoPushToken || typeof expoPushToken !== 'string') {
+      return res.status(400).json({ message: 'expoPushToken is required' });
+    }
+
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
+
+    user.expoPushToken = expoPushToken;
+    await user.save();
+
+    res.json({ message: 'Push token saved' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+module.exports = {
+  getUsers, createUser, updateUser, deleteUser, updateUserProfile, savePushToken
 };

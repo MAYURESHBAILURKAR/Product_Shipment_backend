@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { getUsers, createUser, updateUser, deleteUser, updateUserProfile } = require('../controllers/userController');
+const { getUsers, createUser, updateUser, deleteUser, updateUserProfile, savePushToken } = require('../controllers/userController');
 const { protect } = require('../middleware/authMiddleware');
 
 
@@ -17,6 +17,9 @@ router.route('/')
   .post(protect, admin, createUser);
 
 router.put('/profile', protect, updateUserProfile);
+
+// Must be registered before /:id so "push-token" isn't treated as an id.
+router.post('/push-token', protect, savePushToken);
 
 router.route('/:id')
   .put(protect, admin, updateUser)
