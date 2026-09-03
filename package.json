@@ -20,7 +20,9 @@
   },
   "homepage": "https://github.com/MAYURESHBAILURKAR/Product_Shipment_backend#readme",
   "dependencies": {
+    "archiver": "^7.0.1",
     "bcryptjs": "^3.0.3",
+    "bson": "^7.3.2",
     "cloudinary": "^1.41.3",
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",

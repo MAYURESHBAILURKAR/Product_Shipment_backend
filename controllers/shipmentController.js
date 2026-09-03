@@ -2,6 +2,7 @@ const Shipment = require('../models/Shipment');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const { notifyAdmins, notifyUser } = require('./notificationController');
+const { maybeBackupAfterShipment } = require('../services/backupService');
 
 // @desc    Create a new shipment
 // @route   POST /api/shipments
@@ -78,6 +79,9 @@ const createShipment = async (req, res) => {
       `${req.user.name} shipped ${totalQuantity} units · ₹${totalAmount}`,
       { shipmentId: createdShipment._id.toString() }
     );
+
+    // Back up the DB after every new shipment (fire-and-forget, throttled).
+    maybeBackupAfterShipment();
 
     // TODO: Send SMS/WhatsApp Notification to Admin here
 
