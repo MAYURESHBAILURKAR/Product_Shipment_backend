@@ -140,13 +140,14 @@ const updateShipmentStatus = async (req, res) => {
     const isAdmin = req.user && req.user.role === 'admin';
     const isOwner = shipment.sender.toString() === req.user._id.toString();
 
-    // Non-admins may only touch payment status, and only on their own
-    // shipments. Only admins can move the shipment status itself.
+    // Non-admins may only touch their own shipments, and of the status
+    // values only 'received' — the confirm-receipt action the app also
+    // offers to owners. Any other status change stays admin-only.
     if (!isAdmin) {
       if (!isOwner) {
         return res.status(401).json({ message: 'Not authorized to update this shipment' });
       }
-      if (status) {
+      if (status && status !== 'received') {
         return res.status(401).json({ message: 'Only admins can update shipment status' });
       }
     }
