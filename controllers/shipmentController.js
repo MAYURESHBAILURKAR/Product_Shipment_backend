@@ -4,64 +4,62 @@ const User = require('../models/User');
 const { notifyAdmins, notifyUser } = require('./notificationController');
 const { maybeBackupAfterShipment } = require('../services/backupService');
 
+// @desc    Validate items and price them at the sender's current rate.
+//          Shared by createShipment and the draft endpoints so a draft is
+//          always re-priced fresh at save/edit/send time.
+// @throws  { statusCode, message } on validation failure — callers forward it.
+const buildShipmentItems = async (userId, items) => {
+  const user = await User.findById(userId);
+  const pricePerUnit = user ? user.priceAllotted || 0 : 0;
+
+  let totalQuantity = 0;
+  const shipmentItems = [];
+
+  for (const item of items) {
+    const product = await Product.findById(item.productId);
+
+    if (!product) {
+      throw { statusCode: 404, message: `Product not found: ${item.productId}` };
+    }
+
+    // Check ownership
+    if (product.user.toString() !== userId.toString()) {
+      throw { statusCode: 401, message: 'Not authorized to ship this product' };
+    }
+
+    totalQuantity += Number(item.quantity);
+
+    shipmentItems.push({
+      product: product._id,
+      productName: product.name,
+      quantity: item.quantity,
+      pricePerUnit: pricePerUnit
+    });
+  }
+
+  return {
+    shipmentItems,
+    totalQuantity,
+    totalAmount: totalQuantity * pricePerUnit
+  };
+};
+
 // @desc    Create a new shipment
 // @route   POST /api/shipments
 
 const createShipment = async (req, res) => {
-  const { items } = req.body; 
+  const { items } = req.body;
 
   if (!items || items.length === 0) {
     return res.status(400).json({ message: 'No items in shipment' });
   }
 
   try {
-    let totalQuantity = 0;
-    let totalAmount = 0;
-    const shipmentItems = [];
+    // 1. Validate items and calculate totals at the user's current rate
+    const { shipmentItems, totalQuantity, totalAmount } =
+      await buildShipmentItems(req.user._id, items);
 
-    // 1. Fetch User to get their specific price rate
-    const user = await User.findById(req.user._id);
-    const pricePerUnit = user.priceAllotted || 0;
-
-    // 2. Loop through items to validate and calculate
-    for (const item of items) {
-      const product = await Product.findById(item.productId);
-
-      if (!product) {
-        return res.status(404).json({ message: `Product not found: ${item.productId}` });
-      }
-
-      // Check ownership
-      if (product.user.toString() !== req.user._id.toString()) {
-        return res.status(401).json({ message: 'Not authorized to ship this product' });
-      }
-
-      // Optional: Check Stock (Prevent negative stock)
-    //   if (product.currentStock < item.quantity) {
-    //     return res.status(400).json({ 
-    //       message: `Not enough stock for ${product.name}. Current: ${product.currentStock}` 
-    //     });
-    //   }
-
-      // Deduct Stock
-    //   product.currentStock -= item.quantity;
-    //   await product.save();
-
-      // Add to calculation
-      totalQuantity += Number(item.quantity);
-      
-      shipmentItems.push({
-        product: product._id,
-        productName: product.name,
-        quantity: item.quantity,
-        pricePerUnit: pricePerUnit
-      });
-    }
-
-    // 3. Calculate Final Amount
-    totalAmount = totalQuantity * pricePerUnit;
-
-    // 4. Create Shipment Record
+    // 2. Create Shipment Record
     const shipment = new Shipment({
       sender: req.user._id,
       items: shipmentItems,
@@ -92,8 +90,131 @@ const createShipment = async (req, res) => {
     res.status(201).json(createdShipment);
 
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error(error);
     res.status(500).json({ message: 'Shipment failed', error: error.message });
+  }
+};
+
+// @desc    Save a shipment as a draft — a private working copy. No admin
+//          notification, no backup, invisible in admin lists and reports
+//          until it is sent.
+// @route   POST /api/shipments/draft
+
+const saveShipmentDraft = async (req, res) => {
+  const { items } = req.body;
+
+  if (!items || items.length === 0) {
+    return res.status(400).json({ message: 'No items in shipment' });
+  }
+
+  try {
+    const { shipmentItems, totalQuantity, totalAmount } =
+      await buildShipmentItems(req.user._id, items);
+
+    const draft = new Shipment({
+      sender: req.user._id,
+      items: shipmentItems,
+      totalQuantity,
+      totalAmount,
+      status: 'draft',
+      paymentStatus: 'unpaid'
+    });
+
+    const createdDraft = await draft.save();
+    res.status(201).json(createdDraft);
+
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    console.error(error);
+    res.status(500).json({ message: 'Draft failed', error: error.message });
+  }
+};
+
+// @desc    Send a saved draft — re-prices with the current allotted rate,
+//          stamps a fresh shippedAt and graduates it into the normal flow.
+// @route   PUT /api/shipments/:id/send
+
+const sendShipmentDraft = async (req, res) => {
+  try {
+    const shipment = await Shipment.findById(req.params.id);
+
+    if (!shipment) {
+      return res.status(404).json({ message: 'Shipment not found' });
+    }
+
+    if (shipment.sender.toString() !== req.user._id.toString()) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    if (shipment.status !== 'draft') {
+      return res.status(400).json({ message: 'Only drafts can be sent' });
+    }
+
+    // Re-validate + re-price at send time — the rate may have changed (or a
+    // product deleted) since the draft was saved.
+    const { shipmentItems, totalQuantity, totalAmount } =
+      await buildShipmentItems(
+        req.user._id,
+        shipment.items.map(i => ({ productId: i.product, quantity: i.quantity }))
+      );
+
+    shipment.items = shipmentItems;
+    shipment.totalQuantity = totalQuantity;
+    shipment.totalAmount = totalAmount;
+    shipment.status = 'pending';
+    shipment.shippedAt = Date.now();
+
+    const updatedShipment = await shipment.save();
+
+    notifyAdmins(
+      'New Shipment',
+      `${req.user.name} shipped ${totalQuantity} units · ₹${totalAmount}`,
+      { shipmentId: updatedShipment._id.toString() }
+    );
+
+    maybeBackupAfterShipment();
+
+    res.json(updatedShipment);
+
+  } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+    console.error(error);
+    res.status(500).json({ message: 'Sending draft failed', error: error.message });
+  }
+};
+
+// @desc    Delete a draft. Drafts only — sent shipments are history.
+// @route   DELETE /api/shipments/:id
+
+const deleteShipmentDraft = async (req, res) => {
+  try {
+    const shipment = await Shipment.findById(req.params.id);
+
+    if (!shipment) {
+      return res.status(404).json({ message: 'Shipment not found' });
+    }
+
+    if (shipment.sender.toString() !== req.user._id.toString()) {
+      return res.status(401).json({ message: 'Not authorized' });
+    }
+
+    if (shipment.status !== 'draft') {
+      return res.status(400).json({ message: 'Only drafts can be deleted' });
+    }
+
+    await shipment.deleteOne();
+    res.json({ message: 'Draft deleted' });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -114,8 +235,9 @@ const getMyShipments = async (req, res) => {
 // @route   GET /api/shipments
 const getAllShipments = async (req, res) => {
   try {
-    // Populate sender name so Admin knows who sent it
-    const shipments = await Shipment.find({})
+    // Populate sender name so Admin knows who sent it.
+    // Drafts are private working copies — never shown to admins.
+    const shipments = await Shipment.find({ status: { $ne: 'draft' } })
       .populate('sender', 'name email')
       .sort({ shippedAt: -1 });
     res.json(shipments);
@@ -135,6 +257,12 @@ const updateShipmentStatus = async (req, res) => {
 
     if (!shipment) {
       return res.status(404).json({ message: 'Shipment not found' });
+    }
+
+    // Drafts are pre-send working copies — they graduate via /send (or are
+    // deleted), never by a direct status flip.
+    if (shipment.status === 'draft') {
+      return res.status(400).json({ message: 'Cannot update a draft — send it first' });
     }
 
     const isAdmin = req.user && req.user.role === 'admin';
@@ -236,7 +364,8 @@ const getShipmentReports = async (req, res) => {
       // 1. Filter by Date and Status 
       { 
         $match: { 
-          shippedAt: { $gte: startDate } 
+          shippedAt: { $gte: startDate },
+          status: { $ne: 'draft' }
         } 
       },
       // 2. Group by Sender
@@ -292,71 +421,50 @@ const updateShipment = async (req, res) => {
       return res.status(404).json({ message: 'Shipment not found' });
     }
 
-    // 1. Check Status
-    if (shipment.status !== 'pending') {
+    // 1. Check Status — pending and draft shipments are editable; a draft
+    //    edit keeps its draft status (only /send graduates it).
+    if (shipment.status !== 'pending' && shipment.status !== 'draft') {
       return res.status(400).json({ message: 'Cannot edit processed shipments' });
     }
+    const wasDraft = shipment.status === 'draft';
 
     // 2. Check Authorization
     if (shipment.sender.toString() !== req.user._id.toString() && req.user.role !== 'admin') {
       return res.status(401).json({ message: 'Not authorized' });
     }
 
-    // 3. Revert Old Stock
-    for (const oldItem of shipment.items) {
-      const product = await Product.findById(oldItem.product);
-      if (product) {
-        product.currentStock += oldItem.quantity; 
-        await product.save();
+    // 3. Revert Old Stock — pending edits only. Drafts never deducted
+    //    stock, so reverting would inflate currentStock.
+    if (!wasDraft) {
+      for (const oldItem of shipment.items) {
+        const product = await Product.findById(oldItem.product);
+        if (product) {
+          product.currentStock += oldItem.quantity;
+          await product.save();
+        }
       }
     }
 
-    // 4. Process New Items & Deduct New Stock
-    let totalQuantity = 0;
-    let totalAmount = 0;
-    const newShipmentItems = [];
-    
-    // Get user to find price rate
-    const sender = await User.findById(shipment.sender);
-    const pricePerUnit = sender.priceAllotted || 0;
+    // 4. Process New Items — validate + price at the sender's current rate
+    //    (also re-checks product ownership, which the old inline loop skipped)
+    const {
+      shipmentItems: newShipmentItems,
+      totalQuantity,
+      totalAmount
+    } = await buildShipmentItems(shipment.sender, items);
 
-    for (const newItem of items) {
-      const product = await Product.findById(newItem.productId);
-
-      if (!product) {
-        return res.status(404).json({ message: `Product not found: ${newItem.productId}` });
-      }
-
-      // Check Stock (Prevent negative)
-    //   if (product.currentStock < newItem.quantity) {
-    //     return res.status(400).json({ 
-    //       message: `Not enough stock for ${product.name}. Available: ${product.currentStock}` 
-    //     });
-    //   }
-
-      // Deduct New Stock
-    //   product.currentStock -= newItem.quantity;
-    //   await product.save();
-
-      totalQuantity += Number(newItem.quantity);
-      
-      newShipmentItems.push({
-        product: product._id,
-        productName: product.name,
-        quantity: newItem.quantity,
-        pricePerUnit: pricePerUnit
-      });
-    }
-
-    // 5. Update Shipment Record
+    // 5. Update Shipment Record (status untouched — draft stays draft)
     shipment.items = newShipmentItems;
     shipment.totalQuantity = totalQuantity;
-    shipment.totalAmount = totalQuantity * pricePerUnit;
+    shipment.totalAmount = totalAmount;
 
     const updatedShipment = await shipment.save();
     res.json(updatedShipment);
 
   } catch (error) {
+    if (error.statusCode) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
     console.error(error);
     res.status(500).json({ message: error.message });
   }
@@ -371,7 +479,7 @@ const getWeeklyProductionStats = async (req, res) => {
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     const stats = await Shipment.aggregate([
-      { $match: { shippedAt: { $gte: sevenDaysAgo } } },
+      { $match: { shippedAt: { $gte: sevenDaysAgo }, status: { $ne: 'draft' } } },
       {
         $group: {
           _id: { $dayOfWeek: "$shippedAt" },
@@ -418,7 +526,8 @@ const getShipmentById = async (req, res) => {
 };
 
 // Export it
-module.exports = { 
+module.exports = {
   createShipment, getMyShipments, getAllShipments, updateShipmentStatus, getShipmentReports,
-  updateShipment,getWeeklyProductionStats, getShipmentById
+  updateShipment, getWeeklyProductionStats, getShipmentById,
+  saveShipmentDraft, sendShipmentDraft, deleteShipmentDraft
 };

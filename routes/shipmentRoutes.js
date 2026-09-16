@@ -8,7 +8,10 @@ const {
   getShipmentReports,
   updateShipment,
   getWeeklyProductionStats,
-  getShipmentById
+  getShipmentById,
+  saveShipmentDraft,
+  sendShipmentDraft,
+  deleteShipmentDraft
 } = require('../controllers/shipmentController');
 const { protect } = require('../middleware/authMiddleware');
 
@@ -22,6 +25,7 @@ const admin = (req, res, next) => {
 };
 
 router.post('/', protect, createShipment);
+router.post('/draft', protect, saveShipmentDraft);
 router.get('/reports', protect, admin, getShipmentReports);
 router.get('/stats/weekly', protect, admin, getWeeklyProductionStats);
 router.get('/myshipments', protect, getMyShipments);
@@ -29,5 +33,7 @@ router.get("/:id", protect, getShipmentById);
 router.get('/', protect, admin, getAllShipments);
 router.put('/:id', protect, updateShipmentStatus);
 router.put('/:id/edit', protect, updateShipment);
+router.put('/:id/send', protect, sendShipmentDraft);
+router.delete('/:id', protect, deleteShipmentDraft);
 
 module.exports = router;

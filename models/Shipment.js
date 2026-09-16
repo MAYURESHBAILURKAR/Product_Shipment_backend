@@ -13,10 +13,10 @@ const shipmentSchema = new mongoose.Schema({
   totalQuantity: { type: Number, required: true },
   totalAmount: { type: Number, required: true }, 
   
-  status: { 
-    type: String, 
-    enum: ['pending', 'received', 'rejected'], 
-    default: 'pending' 
+  status: {
+    type: String,
+    enum: ['draft', 'pending', 'received', 'rejected'],
+    default: 'pending'
   },
   paymentStatus: {
     type: String,
