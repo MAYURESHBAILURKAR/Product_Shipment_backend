@@ -40,7 +40,8 @@ const buildShipmentItems = async (userId, items) => {
   return {
     shipmentItems,
     totalQuantity,
-    totalAmount: totalQuantity * pricePerUnit
+    // Round to 2 decimals to avoid float artifacts (e.g. 6000.0000000015)
+    totalAmount: Math.round(totalQuantity * pricePerUnit * 100) / 100
   };
 };
 
